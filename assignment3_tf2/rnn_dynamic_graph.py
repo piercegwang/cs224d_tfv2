@@ -76,22 +76,22 @@ class RNN_Model():
           "Projection") for the linear transformations preceding the
           softmax.
     '''
-    with tf.variable_scope('Embeddings'):
-      tf.get_variable('embeddings', [len(self.vocab), self.config.embed_size])
-    with tf.variable_scope('Composition'):
-      tf.get_variable('W1',
+    with tf.compat.v1.variable_scope('Embeddings'):
+      tf.compat.v1.get_variable('embeddings', [len(self.vocab), self.config.embed_size])
+    with tf.compat.v1.variable_scope('Composition'):
+      tf.compat.v1.get_variable('W1',
                       [2 * self.config.embed_size, self.config.embed_size])
-      tf.get_variable('b1', [1, self.config.embed_size])
-    with tf.variable_scope('Projection'):
-      tf.get_variable('U', [self.config.embed_size, self.config.label_size])
-      tf.get_variable('bs', [1, self.config.label_size])
+      tf.compat.v1.get_variable('b1', [1, self.config.embed_size])
+    with tf.compat.v1.variable_scope('Projection'):
+      tf.compat.v1.get_variable('U', [self.config.embed_size, self.config.label_size])
+      tf.compat.v1.get_variable('bs', [1, self.config.label_size])
 
   def embed_word(self, word):
-    with tf.variable_scope('Embeddings', reuse=True):
-      embeddings = tf.get_variable('embeddings')
+    with tf.compat.v1.variable_scope('Embeddings', reuse=True):
+      embeddings = tf.compat.v1.get_variable('embeddings')
     with tf.device('/cpu:0'):
       return tf.expand_dims(
-          tf.nn.embedding_lookup(embeddings, self.vocab.encode(word)), 0)
+          tf.nn.embedding_lookup(params=embeddings, ids=self.vocab.encode(word)), 0)
 
   def add_model(self, node):
     """Recursively build the model to compute the phrase embeddings in the tree
@@ -109,9 +109,9 @@ class RNN_Model():
     Returns:
         node_tensors: Dict: key = Node, value = tensor(1, embed_size)
     """
-    with tf.variable_scope('Composition', reuse=True):
-      W1 = tf.get_variable('W1')
-      b1 = tf.get_variable('b1')
+    with tf.compat.v1.variable_scope('Composition', reuse=True):
+      W1 = tf.compat.v1.get_variable('W1')
+      b1 = tf.compat.v1.get_variable('b1')
 
     node_tensors = OrderedDict()
     curr_node_tensor = None
@@ -136,9 +136,9 @@ class RNN_Model():
     Returns:
         output: tensor(?, label_size)
     """
-    with tf.variable_scope('Projection', reuse=True):
-      U = tf.get_variable('U')
-      bs = tf.get_variable('bs')
+    with tf.compat.v1.variable_scope('Projection', reuse=True):
+      U = tf.compat.v1.get_variable('U')
+      bs = tf.compat.v1.get_variable('bs')
     logits = tf.matmul(node_tensors, U) + bs
     return logits
 
@@ -154,12 +154,12 @@ class RNN_Model():
         loss: tensor 0-D
     """
     softmax_loss = tf.reduce_sum(
-        tf.nn.sparse_softmax_cross_entropy_with_logits(logits =logits, labels=tf.constant(
+        input_tensor=tf.nn.sparse_softmax_cross_entropy_with_logits(logits =logits, labels=tf.constant(
             labels)))
-    with tf.variable_scope('Composition', reuse=True):
-      W1 = tf.get_variable('W1')
-    with tf.variable_scope('Projection', reuse=True):
-      U = tf.get_variable('U')
+    with tf.compat.v1.variable_scope('Composition', reuse=True):
+      W1 = tf.compat.v1.get_variable('W1')
+    with tf.compat.v1.variable_scope('Projection', reuse=True):
+      U = tf.compat.v1.get_variable('U')
     return softmax_loss + self.config.l2 * (tf.nn.l2_loss(W1) + tf.nn.l2_loss(U)
                                            )
 
@@ -183,7 +183,7 @@ class RNN_Model():
     Returns:
         train_op: tensorflow op for training.
     """
-    return tf.train.GradientDescentOptimizer(self.config.lr).minimize(
+    return tf.compat.v1.train.GradientDescentOptimizer(self.config.lr).minimize(
         loss_tensor)
 
   def predictions(self, y):
@@ -194,7 +194,7 @@ class RNN_Model():
     Returns:
         predictions: tensor(?)
     """
-    return tf.argmax(y, 1)
+    return tf.argmax(input=y, axis=1)
 
   def __init__(self, config):
     self.config = config
@@ -205,9 +205,9 @@ class RNN_Model():
     results = []
     losses = []
     for i in xrange(int(math.ceil(len(trees) / float(RESET_AFTER)))):
-      with tf.Graph().as_default(), tf.Session() as sess:
+      with tf.Graph().as_default(), tf.compat.v1.Session() as sess:
         self.add_model_vars()
-        saver = tf.train.Saver()
+        saver = tf.compat.v1.train.Saver()
         saver.restore(sess, weights_path)
         for tree in trees[i * RESET_AFTER:(i + 1) * RESET_AFTER]:
           logits = self.inference(tree, True)
@@ -225,14 +225,14 @@ class RNN_Model():
     loss_history = []
     random.shuffle(self.train_data)
     while step < len(self.train_data):
-      with tf.Graph().as_default(), tf.Session() as sess:
+      with tf.Graph().as_default(), tf.compat.v1.Session() as sess:
         self.add_model_vars()
         if new_model:
-          init = tf.initialize_all_variables()
+          init = tf.compat.v1.initialize_all_variables()
           sess.run(init)
           new_model = False
         else:
-          saver = tf.train.Saver()
+          saver = tf.compat.v1.train.Saver()
           saver.restore(sess, SAVE_DIR + '%s.temp' % self.config.model_name)
         for _ in xrange(RESET_AFTER):
           if step >= len(self.train_data):
@@ -249,7 +249,7 @@ class RNN_Model():
                 self.train_data), np.mean(loss_history)))
             sys.stdout.flush()
           step += 1
-        saver = tf.train.Saver()
+        saver = tf.compat.v1.train.Saver()
         if not os.path.exists(SAVE_DIR):
           os.makedirs(SAVE_DIR)
         saver.save(sess, SAVE_DIR + '%s.temp' % self.config.model_name)
